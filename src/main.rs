@@ -11,7 +11,8 @@ struct PostData {
     pub link: String,
     pub date: String,
     pub title: String,
-    pub matches_tag: bool,
+    pub cur_tag: String,
+    pub tags: Vec<String>,
 }
 #[derive(PartialEq, Eq, Debug)]
 enum XmlTagType {
@@ -30,7 +31,8 @@ impl PostData {
             link: String::new(),
             date: String::new(),
             title: String::new(),
-            matches_tag: false,
+            cur_tag: String::new(),
+            tags: vec![],
         }
     }
     fn clear(&mut self) {
@@ -38,7 +40,8 @@ impl PostData {
         self.link.clear();
         self.date.clear();
         self.title.clear();
-        self.matches_tag = false;
+        self.cur_tag.clear();
+        self.tags.clear();
     }
 }
 
@@ -47,7 +50,26 @@ fn name_matches(name: &OwnedName, expected: &str) -> bool {
     name.local_name.eq(expected)
 }
 
-// TODO options for including password protected posts
+fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut PostData) {
+    match cur_tag_type {
+        XmlTagType::Title => {
+            // TODO - is there really no .append()?
+            cur_post_data
+                .title
+                .insert_str(cur_post_data.title.len(), &data);
+        }
+        XmlTagType::Tag => {
+            cur_post_data
+                .cur_tag
+                .insert_str(cur_post_data.cur_tag.len(), &data);
+        }
+        _ => {
+            //TODO
+        }
+    }
+}
+
+// TODO options for including password protected posts - look for post_password
 fn main() -> std::io::Result<()> {
     let file = File::open("wordpress.xml")?;
     let file = BufReader::new(file); // Buffering is important for performance
@@ -65,6 +87,8 @@ fn main() -> std::io::Result<()> {
                     if in_item {
                         if name_matches(&name, "title") {
                             cur_tag_type = XmlTagType::Title;
+                        } else if name_matches(&name, "category") {
+                            cur_tag_type = XmlTagType::Tag;
                         }
                     }
                 }
@@ -73,7 +97,10 @@ fn main() -> std::io::Result<()> {
                 if name_matches(&name, "item") {
                     in_item = false;
                     // TODO write it out here if it's valid
-                    print!("{}\n", cur_post_data.title);
+                    // TODO parameterize the tag name
+                    if cur_post_data.tags.contains(&("books".to_string())) {
+                        print!("{}\n", cur_post_data.title);
+                    }
                     cur_post_data.clear();
                     cur_tag_type = XmlTagType::Irrelevant;
                 } else {
@@ -81,22 +108,22 @@ fn main() -> std::io::Result<()> {
                         if name_matches(&name, "title") {
                             assert_eq!(XmlTagType::Title, cur_tag_type);
                             cur_tag_type = XmlTagType::Irrelevant;
+                        } else if name_matches(&name, "category") {
+                            assert_eq!(XmlTagType::Tag, cur_tag_type);
+                            if !cur_post_data.cur_tag.is_empty() {
+                                cur_post_data.tags.push(cur_post_data.cur_tag.clone());
+                                cur_post_data.cur_tag.clear();
+                            }
+                            cur_tag_type = XmlTagType::Irrelevant;
                         }
                     }
                 }
             }
-            // TODO handle Characters too I guess
             Ok(XmlEvent::CData(data)) => {
-                match cur_tag_type {
-                    XmlTagType::Title => {
-                        cur_post_data
-                            .title
-                            .insert_str(cur_post_data.title.len(), &data);
-                    }
-                    _ => {
-                        //TODO
-                    }
-                }
+                read_characters(&cur_tag_type, &data, &mut cur_post_data);
+            }
+            Ok(XmlEvent::Characters(data)) => {
+                read_characters(&cur_tag_type, &data, &mut cur_post_data);
             }
             Err(e) => {
                 panic!("Error: {e}");
