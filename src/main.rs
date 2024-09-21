@@ -50,22 +50,28 @@ fn name_matches(name: &OwnedName, expected: &str) -> bool {
     name.local_name.eq(expected)
 }
 
+fn append_to(target: &mut String, to_append: &str) {
+    target.insert_str(target.len(), to_append);
+}
 fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut PostData) {
     match cur_tag_type {
         XmlTagType::Title => {
             // TODO - is there really no .append()?
-            cur_post_data
-                .title
-                .insert_str(cur_post_data.title.len(), &data);
+            append_to(&mut cur_post_data.title, &data);
         }
         XmlTagType::Tag => {
-            cur_post_data
-                .cur_tag
-                .insert_str(cur_post_data.cur_tag.len(), &data);
+            append_to(&mut cur_post_data.cur_tag, &data);
         }
-        _ => {
-            //TODO
+        XmlTagType::Contents => {
+            append_to(&mut cur_post_data.contents, &data);
         }
+        XmlTagType::Link => {
+            append_to(&mut cur_post_data.link, &data);
+        }
+        XmlTagType::Date => {
+            append_to(&mut cur_post_data.date, &data);
+        }
+        XmlTagType::Irrelevant => {}
     }
 }
 
@@ -89,6 +95,12 @@ fn main() -> std::io::Result<()> {
                             cur_tag_type = XmlTagType::Title;
                         } else if name_matches(&name, "category") {
                             cur_tag_type = XmlTagType::Tag;
+                        } else if name_matches(&name, "encoded") {
+                            cur_tag_type = XmlTagType::Contents;
+                        } else if name_matches(&name, "link") {
+                            cur_tag_type = XmlTagType::Link;
+                        } else if name_matches(&name, "post_date") {
+                            cur_tag_type = XmlTagType::Date;
                         }
                     }
                 }
@@ -100,6 +112,7 @@ fn main() -> std::io::Result<()> {
                     // TODO parameterize the tag name
                     if cur_post_data.tags.contains(&("books".to_string())) {
                         print!("{}\n", cur_post_data.title);
+                        print!("{}\n\n", cur_post_data.contents);
                     }
                     cur_post_data.clear();
                     cur_tag_type = XmlTagType::Irrelevant;
@@ -107,6 +120,15 @@ fn main() -> std::io::Result<()> {
                     if in_item {
                         if name_matches(&name, "title") {
                             assert_eq!(XmlTagType::Title, cur_tag_type);
+                            cur_tag_type = XmlTagType::Irrelevant;
+                        } else if name_matches(&name, "encoded") {
+                            assert_eq!(XmlTagType::Contents, cur_tag_type);
+                            cur_tag_type = XmlTagType::Irrelevant;
+                        } else if name_matches(&name, "link") {
+                            assert_eq!(XmlTagType::Link, cur_tag_type);
+                            cur_tag_type = XmlTagType::Irrelevant;
+                        } else if name_matches(&name, "post_date") {
+                            assert_eq!(XmlTagType::Date, cur_tag_type);
                             cur_tag_type = XmlTagType::Irrelevant;
                         } else if name_matches(&name, "category") {
                             assert_eq!(XmlTagType::Tag, cur_tag_type);
