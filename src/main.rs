@@ -11,6 +11,7 @@ struct PostData {
     pub link: String,
     pub date: String,
     pub title: String,
+    pub has_password: bool,
     pub cur_tag: String,
     pub tags: Vec<String>,
 }
@@ -22,6 +23,7 @@ enum XmlTagType {
     Date,
     Title,
     Tag,
+    Password,
 }
 
 impl PostData {
@@ -31,17 +33,10 @@ impl PostData {
             link: String::new(),
             date: String::new(),
             title: String::new(),
+            has_password: false,
             cur_tag: String::new(),
             tags: vec![],
         }
-    }
-    fn clear(&mut self) {
-        self.contents.clear();
-        self.link.clear();
-        self.date.clear();
-        self.title.clear();
-        self.cur_tag.clear();
-        self.tags.clear();
     }
 }
 
@@ -70,6 +65,11 @@ fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut Po
         }
         XmlTagType::Date => {
             append_to(&mut cur_post_data.date, &data);
+        }
+        XmlTagType::Password => {
+            if !data.is_empty() {
+                cur_post_data.has_password = true;
+            }
         }
         XmlTagType::Irrelevant => {}
     }
@@ -101,6 +101,8 @@ fn main() -> std::io::Result<()> {
                             cur_tag_type = XmlTagType::Link;
                         } else if name_matches(&name, "post_date") {
                             cur_tag_type = XmlTagType::Date;
+                        } else if name_matches(&name, "post_password") {
+                            cur_tag_type = XmlTagType::Password;
                         }
                     }
                 }
@@ -110,11 +112,13 @@ fn main() -> std::io::Result<()> {
                     in_item = false;
                     // TODO write it out here if it's valid
                     // TODO parameterize the tag name
-                    if cur_post_data.tags.contains(&("books".to_string())) {
+                    if cur_post_data.tags.contains(&("books".to_string()))
+                        && !cur_post_data.has_password
+                    {
                         print!("{}\n", cur_post_data.title);
-                        print!("{}\n\n", cur_post_data.contents);
+                        //print!("{}\n\n", cur_post_data.contents);
                     }
-                    cur_post_data.clear();
+                    cur_post_data = PostData::new();
                     cur_tag_type = XmlTagType::Irrelevant;
                 } else {
                     if in_item {
@@ -129,6 +133,9 @@ fn main() -> std::io::Result<()> {
                             cur_tag_type = XmlTagType::Irrelevant;
                         } else if name_matches(&name, "post_date") {
                             assert_eq!(XmlTagType::Date, cur_tag_type);
+                            cur_tag_type = XmlTagType::Irrelevant;
+                        } else if name_matches(&name, "post_password") {
+                            assert_eq!(XmlTagType::Password, cur_tag_type);
                             cur_tag_type = XmlTagType::Irrelevant;
                         } else if name_matches(&name, "category") {
                             assert_eq!(XmlTagType::Tag, cur_tag_type);
