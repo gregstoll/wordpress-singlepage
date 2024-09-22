@@ -104,8 +104,8 @@ fn emit_header(file: &mut File, posts: &[PostData], stats: &Stats) -> std::io::R
     for post in posts {
         write!(
             file,
-            "<li><a href=\"#post-{}\">{}</a></li>\n",
-            index, post.title
+            "<li><a id=\"toc-{}\" href=\"#post-{}\">{}</a></li>\n",
+            index, index, post.title
         )?;
         index += 1;
     }
@@ -148,7 +148,11 @@ fn emit_post(file: &mut File, post_data: &PostData, index: u32) -> std::io::Resu
         "<div class=\"contents\">{}</div>\n",
         post_data.contents
     )?;
-    write!(file, "</div>\n")?;
+    write!(
+        file,
+        "<a href=\"#toc-{}\">(back to table of contents)</a></div>\n",
+        index
+    )?;
     Ok(())
 }
 fn emit_footer(file: &mut File) -> std::io::Result<()> {
