@@ -40,6 +40,21 @@ impl PostData {
     }
 }
 
+struct Stats {
+    pub total_posts: u32,
+    pub posts_emitted: u32,
+    pub posts_skipped_because_of_password: u32,
+}
+impl Stats {
+    fn new() -> Stats {
+        Stats {
+            total_posts: 0,
+            posts_emitted: 0,
+            posts_skipped_because_of_password: 0,
+        }
+    }
+}
+
 fn name_matches(name: &OwnedName, expected: &str) -> bool {
     // TODO consider namespace I guess?
     name.local_name.eq(expected)
@@ -71,11 +86,11 @@ fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut Po
     }
 }
 
-fn emit_header(file: &mut File) -> std::io::Result<()> {
+fn emit_header(file: &mut File, posts: &[PostData], stats: &Stats) -> std::io::Result<()> {
     write!(file, "<!DOCTYPE html><html><head>\n")?;
     write!(file, "<style>\n")?;
     let css_file = File::open("style.css")?;
-    let css_file = BufReader::new(css_file); // Buffering is important for performance
+    let css_file = BufReader::new(css_file);
     // this is ugly
     let mut newline_array = [0u8];
     '\n'.encode_utf8(&mut newline_array);
@@ -83,11 +98,40 @@ fn emit_header(file: &mut File) -> std::io::Result<()> {
         file.write(line?.as_bytes())?;
         file.write(&newline_array)?;
     }
-    write!(file, "</style></head><body>")?;
+    write!(file, "</style></head><body>\n")?;
+    write!(file, "<details><summary>Table of Contents</summary><ul>\n")?;
+    let mut index = 0;
+    for post in posts {
+        write!(
+            file,
+            "<li><a href=\"#post-{}\">{}</a></li>\n",
+            index, post.title
+        )?;
+        index += 1;
+    }
+    write!(file, "</ul></details>\n")?;
+    write!(file, "<details><summary>Stats</summary><ul>\n")?;
+    write!(
+        file,
+        "<li>Posts in this file: {}</li>\n",
+        stats.posts_emitted
+    )?;
+    write!(
+        file,
+        "<li>Posts skipped because of password: {}</li>\n",
+        stats.posts_skipped_because_of_password
+    )?;
+    write!(
+        file,
+        "<li>Total posts in backup: {}</li>\n",
+        stats.total_posts
+    )?;
+    write!(file, "</ul></details>\n")?;
     Ok(())
 }
-fn emit_post(file: &mut File, post_data: &PostData) -> std::io::Result<()> {
-    write!(file, "<div class=\"post\">\n")?;
+
+fn emit_post(file: &mut File, post_data: &PostData, index: u32) -> std::io::Result<()> {
+    write!(file, "<div class=\"post\" id=\"post-{}\">\n", index)?;
     write!(
         file,
         "<div class=\"title\"><a href=\"{}\">{}</a></div>\n",
@@ -116,13 +160,12 @@ fn emit_footer(file: &mut File) -> std::io::Result<()> {
 fn main() -> std::io::Result<()> {
     let file = File::open("wordpress.xml")?;
     let file = BufReader::new(file); // Buffering is important for performance
-    let mut output_file = File::create("output.html")?;
-    emit_header(&mut output_file)?;
-
     let parser = EventReader::new(file);
     let mut in_item = false;
     let mut cur_post_data = PostData::new();
     let mut cur_tag_type = XmlTagType::Irrelevant;
+    let mut posts_to_write = Vec::<PostData>::new();
+    let mut stats = Stats::new();
     for e in parser {
         match e {
             Ok(XmlEvent::StartElement { name, .. }) => {
@@ -149,11 +192,15 @@ fn main() -> std::io::Result<()> {
             Ok(XmlEvent::EndElement { name }) => {
                 if name_matches(&name, "item") {
                     in_item = false;
+                    stats.total_posts += 1;
                     // TODO parameterize the tag name
-                    if cur_post_data.tags.contains(&("books".to_string()))
-                        && !cur_post_data.has_password
-                    {
-                        emit_post(&mut output_file, &cur_post_data)?;
+                    if cur_post_data.tags.contains(&("books".to_string())) {
+                        if cur_post_data.has_password {
+                            stats.posts_skipped_because_of_password += 1;
+                        } else {
+                            stats.posts_emitted += 1;
+                            posts_to_write.push(cur_post_data);
+                        }
                     }
                     cur_post_data = PostData::new();
                     cur_tag_type = XmlTagType::Irrelevant;
@@ -198,6 +245,15 @@ fn main() -> std::io::Result<()> {
             _ => {}
         }
     }
+
+    let mut output_file = File::create("output.html")?;
+    emit_header(&mut output_file, &posts_to_write, &stats)?;
+    let mut index = 0;
+    for post in posts_to_write.iter() {
+        emit_post(&mut output_file, &post, index)?;
+        index += 1;
+    }
+
     emit_footer(&mut output_file)?;
     Ok(())
 }
