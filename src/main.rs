@@ -45,26 +45,22 @@ fn name_matches(name: &OwnedName, expected: &str) -> bool {
     name.local_name.eq(expected)
 }
 
-fn append_to(target: &mut String, to_append: &str) {
-    target.insert_str(target.len(), to_append);
-}
 fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut PostData) {
     match cur_tag_type {
         XmlTagType::Title => {
-            // TODO - is there really no .append()?
-            append_to(&mut cur_post_data.title, &data);
+            cur_post_data.title.push_str(data);
         }
         XmlTagType::Tag => {
-            append_to(&mut cur_post_data.cur_tag, &data);
+            cur_post_data.cur_tag.push_str(data);
         }
         XmlTagType::Contents => {
-            append_to(&mut cur_post_data.contents, &data);
+            cur_post_data.contents.push_str(data);
         }
         XmlTagType::Link => {
-            append_to(&mut cur_post_data.link, &data);
+            cur_post_data.link.push_str(data);
         }
         XmlTagType::Date => {
-            append_to(&mut cur_post_data.date, &data);
+            cur_post_data.date.push_str(data);
         }
         XmlTagType::Password => {
             if !data.is_empty() {
