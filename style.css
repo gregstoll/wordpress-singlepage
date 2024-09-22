@@ -1,0 +1,4 @@
+body { max-width: 600px; }
+.post { margin-bottom: 3em; }
+.post .title { font-weight: bold; font-size: 120%; }
+ 

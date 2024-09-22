@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{BufRead, BufReader, Write};
 
 use xml::{
     name::OwnedName,
@@ -74,12 +74,15 @@ fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut Po
 fn emit_header(file: &mut File) -> std::io::Result<()> {
     write!(file, "<!DOCTYPE html><html><head>\n")?;
     write!(file, "<style>\n")?;
-    write!(file, "body {{ max-width: 600px; }}\n")?;
-    write!(file, ".post {{ margin-bottom: 3em; }}\n")?;
-    write!(
-        file,
-        ".post .title {{ font-weight: bold; font-size: 120%; }}\n"
-    )?;
+    let css_file = File::open("style.css")?;
+    let css_file = BufReader::new(css_file); // Buffering is important for performance
+    // this is ugly
+    let mut newline_array = [0u8];
+    '\n'.encode_utf8(&mut newline_array);
+    for line in css_file.lines() {
+        file.write(line?.as_bytes())?;
+        file.write(&newline_array)?;
+    }
     write!(file, "</style></head><body>")?;
     Ok(())
 }
