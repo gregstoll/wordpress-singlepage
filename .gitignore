@@ -21,3 +21,4 @@ Cargo.lock
 #.idea/
 
 wordpress.xml
+output.html

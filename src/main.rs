@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 
 use xml::{
     name::OwnedName,
@@ -75,10 +75,50 @@ fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut Po
     }
 }
 
+fn emit_header(file: &mut File) -> std::io::Result<()> {
+    write!(file, "<!DOCTYPE html><html><head>\n")?;
+    write!(file, "<style>\n")?;
+    write!(file, "body {{ max-width: 600px; }}\n")?;
+    write!(file, ".post {{ margin-bottom: 3em; }}\n")?;
+    write!(
+        file,
+        ".post .title {{ font-weight: bold; font-size: 120%; }}\n"
+    )?;
+    write!(file, "</style></head><body>")?;
+    Ok(())
+}
+fn emit_post(file: &mut File, post_data: &PostData) -> std::io::Result<()> {
+    write!(file, "<div class=\"post\">\n")?;
+    write!(
+        file,
+        "<div class=\"title\"><a href=\"{}\">{}</a></div>\n",
+        post_data.link, post_data.title
+    )?;
+    write!(file, "<div class=\"date\">{}</div>\n", post_data.date)?;
+    write!(
+        file,
+        "<div class=\"tags\">Tags: {}</div>\n",
+        post_data.tags.join(", ")
+    )?;
+    write!(
+        file,
+        "<div class=\"contents\">{}</div>\n",
+        post_data.contents
+    )?;
+    write!(file, "</div>\n")?;
+    Ok(())
+}
+fn emit_footer(file: &mut File) -> std::io::Result<()> {
+    write!(file, "</body></html>")?;
+    Ok(())
+}
+
 // TODO options for including password protected posts - look for post_password
 fn main() -> std::io::Result<()> {
     let file = File::open("wordpress.xml")?;
     let file = BufReader::new(file); // Buffering is important for performance
+    let mut output_file = File::create("output.html")?;
+    emit_header(&mut output_file)?;
 
     let parser = EventReader::new(file);
     let mut in_item = false;
@@ -110,13 +150,11 @@ fn main() -> std::io::Result<()> {
             Ok(XmlEvent::EndElement { name }) => {
                 if name_matches(&name, "item") {
                     in_item = false;
-                    // TODO write it out here if it's valid
                     // TODO parameterize the tag name
                     if cur_post_data.tags.contains(&("books".to_string()))
                         && !cur_post_data.has_password
                     {
-                        print!("{}\n", cur_post_data.title);
-                        //print!("{}\n\n", cur_post_data.contents);
+                        emit_post(&mut output_file, &cur_post_data)?;
                     }
                     cur_post_data = PostData::new();
                     cur_tag_type = XmlTagType::Irrelevant;
@@ -161,5 +199,6 @@ fn main() -> std::io::Result<()> {
             _ => {}
         }
     }
+    emit_footer(&mut output_file)?;
     Ok(())
 }
