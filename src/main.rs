@@ -1,6 +1,6 @@
+use clap::Parser;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-
 use xml::{
     name::OwnedName,
     reader::{EventReader, XmlEvent},
@@ -55,6 +55,18 @@ impl Stats {
     }
 }
 
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Tag name to get.
+    #[arg(short, long, default_value = "books")]
+    tag_name: String,
+
+    /// Whether to include password protected posts
+    #[arg(short, long)]
+    include_password_protected_posts: bool,
+}
+
 fn name_matches(name: &OwnedName, expected: &str) -> bool {
     // TODO consider namespace I guess?
     name.local_name.eq(expected)
@@ -86,8 +98,17 @@ fn read_characters(cur_tag_type: &XmlTagType, data: &str, cur_post_data: &mut Po
     }
 }
 
-fn emit_header(file: &mut File, posts: &[PostData], stats: &Stats) -> std::io::Result<()> {
-    write!(file, "<!DOCTYPE html><html><head>\n")?;
+fn emit_header(
+    file: &mut File,
+    posts: &[PostData],
+    args: &Args,
+    stats: &Stats,
+) -> std::io::Result<()> {
+    write!(
+        file,
+        "<!DOCTYPE html><html><head><title>Wordpress tag &quot;{}&quot; output</title>\n",
+        args.tag_name
+    )?;
     write!(file, "<style>\n")?;
     let css_file = File::open("style.css")?;
     let css_file = BufReader::new(css_file);
@@ -127,6 +148,7 @@ fn emit_header(file: &mut File, posts: &[PostData], stats: &Stats) -> std::io::R
         stats.total_posts
     )?;
     write!(file, "</ul></details>\n")?;
+    write!(file, "<br><br>\n")?;
     Ok(())
 }
 
@@ -150,18 +172,19 @@ fn emit_post(file: &mut File, post_data: &PostData, index: u32) -> std::io::Resu
     )?;
     write!(
         file,
-        "<a href=\"#toc-{}\">(back to table of contents)</a></div>\n",
+        "<div class=\"toc-link\"><a href=\"#toc-{}\">(back to table of contents)</a></div></div>\n",
         index
     )?;
     Ok(())
 }
+
 fn emit_footer(file: &mut File) -> std::io::Result<()> {
     write!(file, "</body></html>")?;
     Ok(())
 }
 
-// TODO options for including password protected posts - look for post_password
 fn main() -> std::io::Result<()> {
+    let args = Args::parse();
     let file = File::open("wordpress.xml")?;
     let file = BufReader::new(file); // Buffering is important for performance
     let parser = EventReader::new(file);
@@ -197,9 +220,8 @@ fn main() -> std::io::Result<()> {
                 if name_matches(&name, "item") {
                     in_item = false;
                     stats.total_posts += 1;
-                    // TODO parameterize the tag name
-                    if cur_post_data.tags.contains(&("books".to_string())) {
-                        if cur_post_data.has_password {
+                    if cur_post_data.tags.contains(&args.tag_name) {
+                        if cur_post_data.has_password && !args.include_password_protected_posts {
                             stats.posts_skipped_because_of_password += 1;
                         } else {
                             stats.posts_emitted += 1;
@@ -251,7 +273,7 @@ fn main() -> std::io::Result<()> {
     }
 
     let mut output_file = File::create("output.html")?;
-    emit_header(&mut output_file, &posts_to_write, &stats)?;
+    emit_header(&mut output_file, &posts_to_write, &args, &stats)?;
     let mut index = 0;
     for post in posts_to_write.iter() {
         emit_post(&mut output_file, &post, index)?;
